@@ -1,0 +1,91 @@
+# DSL2 Example: Leave Request Approval Process
+# Demonstrates workflow, docflow, roles, events, and EPC2 mapping
+
+process LeaveApproval:
+  title: "Leave Request Approval"
+
+  documents:
+    LeaveRequest:
+      states:
+        - template
+        - submitted
+        - manager_approved
+        - director_approved
+        - rejected
+
+  roles:
+    - Applicant
+    - Manager
+    - Director
+    - Supervisor   # Supervisor can act on behalf of all roles
+
+  workflow:
+    start: ProcessStart
+
+    steps:
+      - function FillAndSubmit:
+          role: Applicant
+          system: WebForm
+          input_doc:
+            - LeaveRequest.template
+          output_doc:
+            - LeaveRequest.submitted
+          on_complete:
+            - event: RequestSubmitted
+              next: ApproveByManager
+
+      - function ApproveByManager:
+          role: Manager
+          system: WebForm
+          input_doc:
+            - LeaveRequest.submitted
+          output_doc:
+            - LeaveRequest.manager_approved
+            - LeaveRequest.rejected
+          on_complete:
+            - event: ManagerApproved
+              condition: "decision == 'approved'"
+              output_doc: LeaveRequest.manager_approved
+              next: ApproveByDirector
+            - event: ManagerRejected
+              condition: "decision == 'rejected'"
+              output_doc: LeaveRequest.rejected
+              next: NotifyRejection
+
+      - function ApproveByDirector:
+          role: Director
+          system: WebForm
+          input_doc:
+            - LeaveRequest.manager_approved
+          output_doc:
+            - LeaveRequest.director_approved
+            - LeaveRequest.rejected
+          on_complete:
+            - event: DirectorApproved
+              condition: "decision == 'approved'"
+              output_doc: LeaveRequest.director_approved
+              next: NotifyApproval
+            - event: DirectorRejected
+              condition: "decision == 'rejected'"
+              output_doc: LeaveRequest.rejected
+              next: NotifyRejection
+
+      - function NotifyApproval:
+          role: System
+          system: NotificationService
+          input_doc:
+            - LeaveRequest.director_approved
+          on_complete:
+            - event: ApprovalNotified
+              next: end
+
+      - function NotifyRejection:
+          role: System
+          system: NotificationService
+          input_doc:
+            - LeaveRequest.rejected
+          on_complete:
+            - event: RejectionNotified
+              next: end
+
+    end: ProcessEnd
