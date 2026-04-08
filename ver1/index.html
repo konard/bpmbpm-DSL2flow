@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DSL2flow — Leave Request Approval</title>
+
+  <!-- Mermaid for EPC2 diagrams -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #e0e0e0;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    }
+    header h1 { font-size: 1.3rem; font-weight: 600; }
+    header .subtitle { font-size: 0.85rem; color: #9ca3af; }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 16px;
+      padding: 16px;
+      min-height: calc(100vh - 64px);
+    }
+
+    /* ---- PANELS ---- */
+    .panel {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.1);
+      overflow: hidden;
+    }
+    .panel-header {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 10px 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .panel-body { padding: 16px; }
+
+    /* ---- LEFT COLUMN ---- */
+    .left-col {
+      grid-column: 1;
+      grid-row: 1 / 3;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Role selector */
+    .role-selector label { font-size: 0.85rem; color: #6b7280; margin-bottom: 6px; display: block; }
+    .role-selector select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      background: #fff;
+    }
+
+    /* Process status */
+    .status-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.85rem;
+    }
+    .status-box .label { color: #6b7280; font-size: 0.78rem; text-transform: uppercase; }
+    .status-box .value { font-weight: 600; color: #1a1a2e; margin-top: 2px; word-break: break-word; }
+    .status-row { margin-bottom: 10px; }
+    .status-row:last-child { margin-bottom: 0; }
+
+    /* Action panel */
+    .action-area { display: flex; flex-direction: column; gap: 10px; }
+    .action-area .hint { font-size: 0.82rem; color: #6b7280; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: #4f46e5; color: #fff; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-danger  { background: #dc2626; color: #fff; }
+    .btn-outline { background: transparent; color: #4f46e5; border: 1.5px solid #4f46e5; }
+    .btn-sm { padding: 6px 12px; font-size: 0.82rem; }
+    .btn-full { width: 100%; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #1a1a2e; color: #fff;
+      padding: 10px 18px; border-radius: 8px;
+      font-size: 0.85rem; opacity: 0;
+      transition: opacity .3s;
+      pointer-events: none;
+      z-index: 999;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ---- RIGHT COLUMN ---- */
+    .right-col {
+      grid-column: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 2px; border-bottom: 2px solid #e5e7eb; padding: 0 16px; }
+    .tab-btn {
+      padding: 10px 18px;
+      border: none;
+      background: transparent;
+      font-size: 0.87rem;
+      font-weight: 500;
+      color: #6b7280;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn.active { color: #4f46e5; border-bottom-color: #4f46e5; font-weight: 700; }
+
+    .tab-content { display: none; padding: 16px; flex: 1; }
+    .tab-content.active { display: block; }
+
+    /* Mermaid diagram */
+    #mermaid-container {
+      background: #fafafa;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      overflow: auto;
+      min-height: 300px;
+    }
+    #mermaid-container .mermaid { display: flex; justify-content: center; }
+
+    /* State table */
+    .table-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .table-wrapper { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.83rem;
+    }
+    thead th {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 8px 10px;
+      text-align: left;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    tbody tr:hover { background: #eff6ff; }
+    tbody td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e5e7eb;
+      white-space: nowrap;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-blue  { background: #dbeafe; color: #1d4ed8; }
+    .badge-green { background: #dcfce7; color: #15803d; }
+    .badge-red   { background: #fee2e2; color: #b91c1c; }
+    .badge-gray  { background: #f3f4f6; color: #374151; }
+
+    /* DSL source panel */
+    textarea#dsl-source {
+      width: 100%;
+      height: 400px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.82rem;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      resize: vertical;
+      background: #1e1e2e;
+      color: #cdd6f4;
+    }
+    .dsl-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+
+    /* Finished overlay */
+    .finished-banner {
+      background: linear-gradient(135deg, #16a34a, #15803d);
+      color: #fff;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    /* Doc tokens */
+    .doc-token-list { list-style: none; }
+    .doc-token-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 0.85rem;
+    }
+    .doc-token-list li:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>DSL2flow — BPMN-Engine Demo</h1>
+    <div class="subtitle">Leave Request Approval &nbsp;·&nbsp; EPC2 / DSL2 / Workflow + Docflow</div>
+  </div>
+</header>
+
+<div class="main-grid">
+
+  <!-- ===== LEFT COLUMN ===== -->
+  <div class="left-col">
+
+    <!-- Role Selector -->
+    <div class="panel">
+      <div class="panel-header">Active Role</div>
+      <div class="panel-body">
+        <div class="role-selector">
+          <label for="role-select">Select your role:</label>
+          <select id="role-select"></select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Process Status -->
+    <div class="panel" id="status-panel">
+      <div class="panel-header">Process Status</div>
+      <div class="panel-body">
+        <div id="finished-banner" class="finished-banner" style="display:none">
+          Process Finished ✓
+        </div>
+        <div class="status-box">
+          <div class="status-row">
+            <div class="label">Current Function</div>
+            <div class="value" id="s-function">—</div>
+          </div>
+          <div class="status-row">
+            <div class="label">Required Role</div>
+            <div class="value" id="s-role">—</div>
+          </div>
+          <div class="status-row">
+            <div class="label">Workflow Token</div>
+            <div class="value" id="s-wf-token">—</div>
+          </div>
+          <div class="status-row">
+            <div class="label">Tick</div>
+            <div class="value" id="s-tick">0</div>
+          </div>
+        </div>
+        <br/>
+        <div class="panel-header" style="margin: -4px -0px 8px; border-radius:6px; font-size:.78rem;">Document Tokens</div>
+        <ul class="doc-token-list" id="doc-token-list"></ul>
+      </div>
+    </div>
+
+    <!-- Action Panel -->
+    <div class="panel" id="action-panel">
+      <div class="panel-header">Actions</div>
+      <div class="panel-body action-area">
+        <div class="hint" id="action-hint">Start the process to begin.</div>
+        <div id="action-buttons"></div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="panel">
+      <div class="panel-header">Controls</div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:8px;">
+        <button class="btn btn-primary btn-full" id="btn-start">▶ Start / Restart Process</button>
+        <button class="btn btn-outline btn-full btn-sm" id="btn-export-excel">⬇ Export State Table (Excel)</button>
+      </div>
+    </div>
+
+  </div><!-- /left-col -->
+
+  <!-- ===== RIGHT COLUMN ===== -->
+  <div class="right-col panel">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="diagram">EPC2 Diagram</button>
+      <button class="tab-btn" data-tab="table">State Table</button>
+      <button class="tab-btn" data-tab="dsl">DSL Source</button>
+      <button class="tab-btn" data-tab="js">Generated JS</button>
+    </div>
+
+    <!-- EPC2 Diagram -->
+    <div class="tab-content active" id="tab-diagram">
+      <div id="mermaid-container">
+        <div class="mermaid" id="mermaid-diagram">
+          <!-- will be rendered by Mermaid.js -->
+        </div>
+      </div>
+    </div>
+
+    <!-- State Table -->
+    <div class="tab-content" id="tab-table">
+      <div class="table-toolbar">
+        <strong style="font-size:.9rem;">Execution Trace</strong>
+        <button class="btn btn-outline btn-sm" id="btn-export-excel-2">⬇ Export Excel</button>
+      </div>
+      <div class="table-wrapper">
+        <table id="state-table">
+          <thead>
+            <tr>
+              <th>Tick</th>
+              <th>Function</th>
+              <th>Role</th>
+              <th>WF Token Before</th>
+              <th>WF Token After</th>
+              <th>Event Fired</th>
+              <th>Doc Transitions</th>
+            </tr>
+          </thead>
+          <tbody id="state-table-body">
+            <tr><td colspan="7" style="color:#9ca3af;padding:20px;text-align:center;">Start the process to see execution trace.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DSL Source -->
+    <div class="tab-content" id="tab-dsl">
+      <div class="dsl-toolbar">
+        <button class="btn btn-primary btn-sm" id="btn-reload-dsl">⟳ Re-translate & Restart</button>
+      </div>
+      <textarea id="dsl-source"></textarea>
+    </div>
+
+    <!-- Generated JS -->
+    <div class="tab-content" id="tab-js">
+      <pre id="generated-js-pre" style="
+        background:#1e1e2e; color:#cdd6f4;
+        padding:16px; border-radius:8px;
+        font-size:0.8rem; overflow:auto;
+        max-height:600px; white-space:pre-wrap;
+      "></pre>
+    </div>
+
+  </div><!-- /right-col -->
+
+</div><!-- /main-grid -->
+
+<div id="toast"></div>
+
+<!-- ===================== Translator ===================== -->
+<script src="translator.js"></script>
+
+<!-- ===================== App ===================== -->
+<script>
+(function () {
+  'use strict';
+
+  /* ---- Default DSL2 source ---- */
+  const DEFAULT_DSL = `process LeaveApproval:
+  title: "Leave Request Approval"
+
+  documents:
+    LeaveRequest:
+      states:
+        - template
+        - submitted
+        - manager_approved
+        - director_approved
+        - rejected
+
+  roles:
+    - Applicant
+    - Manager
+    - Director
+    - Supervisor
+
+  workflow:
+    start: ProcessStart
+
+    steps:
+      - function FillAndSubmit:
+          role: Applicant
+          system: WebForm
+          input_doc:
+            - LeaveRequest.template
+          output_doc:
+            - LeaveRequest.submitted
+          on_complete:
+            - event: RequestSubmitted
+              next: ApproveByManager
+
+      - function ApproveByManager:
+          role: Manager
+          system: WebForm
+          input_doc:
+            - LeaveRequest.submitted
+          output_doc:
+            - LeaveRequest.manager_approved
+          on_complete:
+            - event: ManagerApproved
+              condition: "decision == 'approved'"
+              output_doc: LeaveRequest.manager_approved
+              next: ApproveByDirector
+            - event: ManagerRejected
+              condition: "decision == 'rejected'"
+              output_doc: LeaveRequest.rejected
+              next: NotifyRejection
+
+      - function ApproveByDirector:
+          role: Director
+          system: WebForm
+          input_doc:
+            - LeaveRequest.manager_approved
+          output_doc:
+            - LeaveRequest.director_approved
+          on_complete:
+            - event: DirectorApproved
+              condition: "decision == 'approved'"
+              output_doc: LeaveRequest.director_approved
+              next: NotifyApproval
+            - event: DirectorRejected
+              condition: "decision == 'rejected'"
+              output_doc: LeaveRequest.rejected
+              next: NotifyRejection
+
+      - function NotifyApproval:
+          role: System
+          system: NotificationService
+          input_doc:
+            - LeaveRequest.director_approved
+          on_complete:
+            - event: ApprovalNotified
+              next: end
+
+      - function NotifyRejection:
+          role: System
+          system: NotificationService
+          input_doc:
+            - LeaveRequest.rejected
+          on_complete:
+            - event: RejectionNotified
+              next: end
+
+    end: ProcessEnd`;
+
+  /* ---- State ---- */
+  let engine = null;      // current engine object (from generated code)
+  let processDef = null;
+  let mermaidCode = '';
+  let jsCode = '';
+
+  /* ---- Boot ---- */
+  mermaid.initialize({ startOnLoad: false, theme: 'default' });
+  document.getElementById('dsl-source').value = DEFAULT_DSL;
+  initFromDSL(DEFAULT_DSL);
+
+  /* ---- Tab switching ---- */
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  /* ---- Buttons ---- */
+  document.getElementById('btn-start').addEventListener('click', startProcess);
+  document.getElementById('btn-reload-dsl').addEventListener('click', () => {
+    const src = document.getElementById('dsl-source').value;
+    initFromDSL(src);
+    startProcess();
+    toast('DSL re-translated and process restarted.');
+  });
+  document.getElementById('btn-export-excel').addEventListener('click', exportExcel);
+  document.getElementById('btn-export-excel-2').addEventListener('click', exportExcel);
+
+  /* ---- Role select change → refresh actions ---- */
+  document.getElementById('role-select').addEventListener('change', renderActions);
+
+  /* ================================================================== */
+  /* INIT FROM DSL                                                        */
+  /* ================================================================== */
+  function initFromDSL(src) {
+    try {
+      const result = DSL2Translator.translate(src);
+      processDef = result.definition;
+      jsCode = result.jsCode;
+      mermaidCode = result.mermaidCode;
+
+      // Build engine from generated code
+      const engineFactory = new Function(
+        jsCode + '\nreturn window["' + processDef.name + 'Engine"];'
+      );
+      try {
+        engine = engineFactory();
+        if (!engine) {
+          // Fallback: eval the code and grab from window
+          eval(jsCode);
+          engine = window[processDef.name + 'Engine'];
+        }
+      } catch(e) {
+        eval(jsCode);
+        engine = window[processDef.name + 'Engine'];
+      }
+
+      // Populate roles
+      const roleSelect = document.getElementById('role-select');
+      roleSelect.innerHTML = '';
+      for (const r of processDef.roles) {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        roleSelect.appendChild(opt);
+      }
+      // Default to Supervisor
+      const supOpt = Array.from(roleSelect.options).find(o => o.value === 'Supervisor');
+      if (supOpt) supOpt.selected = true;
+
+      // Render diagram
+      renderMermaid(mermaidCode);
+
+      // Show generated JS
+      document.getElementById('generated-js-pre').textContent = jsCode;
+
+    } catch(err) {
+      toast('DSL parse error: ' + err.message);
+      console.error(err);
+    }
+  }
+
+  /* ================================================================== */
+  /* START PROCESS                                                        */
+  /* ================================================================== */
+  function startProcess() {
+    if (!engine) return;
+    engine.createInstance();
+    document.getElementById('finished-banner').style.display = 'none';
+    refreshUI();
+    toast('Process started.');
+  }
+
+  /* ================================================================== */
+  /* RENDER UI                                                            */
+  /* ================================================================== */
+  function refreshUI() {
+    if (!engine) return;
+    const st = engine.getState();
+    if (!st) return;
+
+    const def = engine.getDefinition();
+    const funcName = st.currentFunction || '—';
+    const funcDef = def.steps.find(s => s.name === funcName);
+    const reqRole = funcDef ? funcDef.role : '—';
+
+    document.getElementById('s-function').textContent = funcName;
+    document.getElementById('s-role').textContent    = reqRole;
+    document.getElementById('s-wf-token').textContent = st.workflowToken;
+    document.getElementById('s-tick').textContent    = st.tick;
+
+    if (st.finished) {
+      document.getElementById('finished-banner').style.display = 'block';
+    }
+
+    // Doc tokens
+    const dtList = document.getElementById('doc-token-list');
+    dtList.innerHTML = '';
+    for (const [docType, docState] of Object.entries(st.docTokens)) {
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${docType}</span><span class="badge badge-blue">${docState || '—'}</span>`;
+      dtList.appendChild(li);
+    }
+
+    renderActions();
+    renderStateTable();
+  }
+
+  /* ---- Action Buttons ---- */
+  function renderActions() {
+    if (!engine) return;
+    const st = engine.getState();
+    const container = document.getElementById('action-buttons');
+    const hint = document.getElementById('action-hint');
+    container.innerHTML = '';
+
+    if (!st || st.finished) {
+      hint.textContent = st && st.finished
+        ? 'Process finished. Click "Start / Restart" to run again.'
+        : 'Process not started.';
+      return;
+    }
+
+    const def = engine.getDefinition();
+    const funcDef = def.steps.find(s => s.name === st.currentFunction);
+    if (!funcDef) return;
+
+    const selectedRole = document.getElementById('role-select').value;
+    const canExecute = funcDef.role === 'System' ||
+                       selectedRole === funcDef.role ||
+                       selectedRole === 'Supervisor';
+
+    if (!canExecute) {
+      hint.textContent = `This step requires role: "${funcDef.role}". Switch role to continue.`;
+      return;
+    }
+
+    hint.textContent = `Function: ${funcDef.name}  ·  Role: ${funcDef.role}`;
+
+    // If function is "System", auto-execute
+    if (funcDef.role === 'System') {
+      hint.textContent = 'System function — auto-executing...';
+      setTimeout(() => {
+        doExecute(selectedRole, null);
+      }, 600);
+      return;
+    }
+
+    // Build buttons from on_complete events
+    const events = funcDef.on_complete || [];
+    if (events.length === 0) {
+      // Fallback: single "Complete" button
+      const btn = makeBtn('Complete', 'btn-primary', () => doExecute(selectedRole, null));
+      container.appendChild(btn);
+      return;
+    }
+
+    // Infer buttons from event names/conditions
+    for (const oc of events) {
+      let label = oc.event;
+      let cls = 'btn-primary';
+
+      // Heuristics for nice labels
+      if (oc.condition && oc.condition.includes("'approved'")) {
+        label = 'Согласовано / Approve'; cls = 'btn-success';
+      } else if (oc.condition && oc.condition.includes("'rejected'")) {
+        label = 'Отказано / Reject'; cls = 'btn-danger';
+      } else if (events.length === 1) {
+        label = 'Submit / На Согласование';
+      }
+
+      const decision = oc.condition
+        ? (oc.condition.includes("'approved'") ? 'approved' : 'rejected')
+        : null;
+
+      const btn = makeBtn(label, cls, () => doExecute(selectedRole, decision));
+      container.appendChild(btn);
+    }
+  }
+
+  function makeBtn(label, cls, handler) {
+    const btn = document.createElement('button');
+    btn.className = `btn ${cls} btn-full`;
+    btn.style.marginBottom = '8px';
+    btn.textContent = label;
+    btn.addEventListener('click', handler);
+    return btn;
+  }
+
+  function doExecute(role, decision) {
+    if (!engine) return;
+    const result = engine.execute(role, decision);
+    if (!result.ok) {
+      toast('Error: ' + result.error);
+      return;
+    }
+    toast('Event fired: ' + result.event);
+    refreshUI();
+
+    // If next is also a System function, let renderActions auto-trigger it
+  }
+
+  /* ---- State Table ---- */
+  function renderStateTable() {
+    if (!engine) return;
+    const history = engine.getHistory();
+    const tbody = document.getElementById('state-table-body');
+    tbody.innerHTML = '';
+
+    if (history.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="color:#9ca3af;padding:20px;text-align:center;">No history yet.</td></tr>';
+      return;
+    }
+
+    for (const row of history) {
+      const tr = document.createElement('tr');
+
+      const docTrans = Object.entries(row.docTransitions || {})
+        .map(([k, v]) => `${k}: ${v.from} → ${v.to}`)
+        .join('; ') || '—';
+
+      const eventBadge = row.eventFired
+        ? `<span class="badge badge-blue">${row.eventFired}</span>`
+        : '—';
+
+      tr.innerHTML = `
+        <td>${row.tick}</td>
+        <td>${row.function || '—'}</td>
+        <td>${row.role ? '<span class="badge badge-gray">' + row.role + '</span>' : '—'}</td>
+        <td>${row.workflowTokenBefore || '—'}</td>
+        <td>${row.workflowTokenAfter || '—'}</td>
+        <td>${eventBadge}</td>
+        <td style="font-size:.78rem;color:#374151">${docTrans}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  /* ================================================================== */
+  /* MERMAID RENDER                                                       */
+  /* ================================================================== */
+  async function renderMermaid(code) {
+    const container = document.getElementById('mermaid-diagram');
+    container.innerHTML = '';
+    try {
+      const { svg } = await mermaid.render('epc2-graph', code);
+      container.innerHTML = svg;
+    } catch(e) {
+      container.innerHTML = '<pre style="color:red;font-size:.8rem;">' + e.message + '\n\n' + code + '</pre>';
+    }
+  }
+
+  /* ================================================================== */
+  /* EXCEL EXPORT                                                         */
+  /* ================================================================== */
+  function exportExcel() {
+    if (!engine) { toast('No process loaded.'); return; }
+    const history = engine.getHistory();
+    if (history.length === 0) { toast('No history to export.'); return; }
+
+    const rows = history.map(row => {
+      const docTrans = Object.entries(row.docTransitions || {})
+        .map(([k, v]) => `${k}: ${v.from} → ${v.to}`)
+        .join('; ') || '';
+      return {
+        'Tick':              row.tick,
+        'Function':          row.function || '',
+        'Role':              row.role || '',
+        'WF Token Before':   row.workflowTokenBefore || '',
+        'WF Token After':    row.workflowTokenAfter || '',
+        'Event Fired':       row.eventFired || '',
+        'Doc Transitions':   docTrans
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Column widths
+    ws['!cols'] = [
+      { wch: 6 }, { wch: 22 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 40 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'State Table');
+
+    // Metadata sheet
+    const def = engine.getDefinition();
+    const metaRows = [
+      { Key: 'Process', Value: def.name },
+      { Key: 'Title',   Value: def.title || '' },
+      { Key: 'Exported', Value: new Date().toISOString() }
+    ];
+    const wsMeta = XLSX.utils.json_to_sheet(metaRows);
+    XLSX.utils.book_append_sheet(wb, wsMeta, 'Metadata');
+
+    XLSX.writeFile(wb, (def.name || 'process') + '_state_table.xlsx');
+    toast('Exported to Excel.');
+  }
+
+  /* ================================================================== */
+  /* TOAST                                                                */
+  /* ================================================================== */
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+})();
+</script>
+</body>
+</html>
