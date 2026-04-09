@@ -42,7 +42,7 @@ const DSL2Translator = (() => {
 
     // Parse top-level "process <Name>:"
     skipBlanks();
-    const procMatch = next().match(/^process\s+(\w+)\s*:/);
+    const procMatch = next().match(/^process\s+(\S+)\s*:/);
     if (!procMatch) throw new Error('DSL2 must start with "process <Name>:"');
     process.name = procMatch[1];
     process.documents = {};
@@ -110,7 +110,7 @@ const DSL2Translator = (() => {
         // List item might be a scalar or an inline map "key: value"
         if (rest.includes(':')) {
           // Could be "function Foo:" or "event E:"
-          const km = rest.match(/^(\w+)\s+(\w+)\s*:$/);
+          const km = rest.match(/^(\w+)\s+(\S+)\s*:$/);
           if (km) {
             // e.g.  "- function FillAndSubmit:"
             const item = { _type: km[1], _name: km[2] };
@@ -119,10 +119,19 @@ const DSL2Translator = (() => {
             Object.assign(item, parseBlock(itemInd - 1));
             arr.push(item);
           } else {
-            // e.g.  "- event: RequestSubmitted"
+            // e.g.  "- event: RequestSubmitted"  или  "- event: ManagerApproved" с подсвойствами
             const kvMatch = rest.match(/^([\w_]+)\s*:\s*(.+)$/);
             if (kvMatch) {
-              arr.push({ [kvMatch[1]]: unquote(kvMatch[2].trim()) });
+              const item = { [kvMatch[1]]: unquote(kvMatch[2].trim()) };
+              // Читаем дополнительные подсвойства (condition, next, output_doc и т.д.)
+              skipBlanks();
+              if (i < lines.length) {
+                const nextInd = indent(peek());
+                if (nextInd > ind && !peek().trim().startsWith('- ')) {
+                  Object.assign(item, parseBlock(nextInd - 1));
+                }
+              }
+              arr.push(item);
             } else {
               arr.push(rest);
             }
